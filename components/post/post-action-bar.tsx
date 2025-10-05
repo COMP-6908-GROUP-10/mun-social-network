@@ -1,5 +1,4 @@
 import {ChartColumnDecreasingIcon, HeartPlusIcon, LucideIcon, MessageCircleMoreIcon, ShareIcon} from "lucide-react";
-import {TypographySmall} from "@/components/ui/typography";
 
 function PostActionBar() {
     return (

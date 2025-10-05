@@ -57,6 +57,6 @@ export function TypographyP({ children, className } : Readonly<{ children: React
 
 export function TypographySmall({ children, className } : Readonly<{ children: React.ReactNode, className?: string }>) {
     return (
-        <small className={cn("text-sm leading-none font-medium", className)}> { children } </small>
+        <small className={cn("text-sm leading-normal font-medium", className)}> { children } </small>
     )
 }

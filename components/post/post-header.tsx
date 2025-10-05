@@ -18,7 +18,7 @@ export default function PostHeader({ post }: { post: Post }) {
                     <TypographySmall className={"text-xs text-muted-foreground"}> posted 1w ago </TypographySmall>
                 </div>
             </div>
-            <Button variant={"ghost"}>
+            <Button variant={"ghost"} className={"text-red-500 font-bold"}>
                 <PlusIcon size={20} />
                 Follow
             </Button>

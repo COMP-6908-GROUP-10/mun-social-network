@@ -1,4 +1,4 @@
-import {Post} from "@/lib/models";
+import {Comment, Post} from "@/lib/models";
 
 
 export async function getPosts() : Promise<Post[]> {
@@ -108,4 +108,49 @@ export async function getPosts() : Promise<Post[]> {
         },
     ]
 
+}
+
+export async function getComments(): Promise<Comment[]> {
+    return [
+        {
+            id: "c-1",
+            message: "he looked So smug when he pulled that card 🥚",
+            user: {
+                name: "Daniel Lambda",
+                department: "MASc Artificial Intelligence"
+            }
+        },
+        {
+            id: "c-2",
+            message: "99+ missed calls from ZackDFilms",
+            user: {
+                name: "Step Adams",
+                department: "BSc Business Admin"
+            }
+        },
+        {
+            id: "c-3",
+            message: "On the bright side, he is contributing to science and giving those hungry sharks a meal.",
+            user: {
+                name: "Steve Jobs",
+                department: "BSc Designer"
+            }
+        },
+        {
+            id: "c-4",
+            message: "getting a you know reverse card before getting mauled to death is wild",
+            user: {
+                name: "Peter Drew",
+                department: "MSc Aviation & Mechanics "
+            }
+        },
+        {
+            id: "c-5",
+            message: "The baldy has very creepy smile btw",
+            user: {
+                name: "Cyndy Matt",
+                department: "MASc Software Engineering"
+            }
+        }
+    ]
 }

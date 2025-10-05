@@ -1,13 +1,13 @@
-import {TypographySmall} from "@/components/ui/typography";
-import {InfoIcon} from "lucide-react";
+import {Suspense} from "react";
+import Comments from "@/components/comments/comments";
 
 function CommentsContent() {
+
     return (
         <main className={"px-4 py-8"}>
-            <div className={"flex gap-2 items-center"}>
-                <InfoIcon size={18} />
-                <TypographySmall className={"block"}> Select post to read comments </TypographySmall>
-            </div>
+            <Suspense fallback={<p> loading.. </p>} >
+                <Comments />
+            </Suspense>
         </main>
     )
 }

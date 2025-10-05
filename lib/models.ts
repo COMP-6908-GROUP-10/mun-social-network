@@ -11,3 +11,14 @@ export interface User {
     name: string
     department: string
 }
+
+
+export interface Comment {
+    id?: string;
+    parentId?: string;
+    rootId?: string;
+    user: User;
+    message: string;
+    totalReplies?: number
+    totalLikes?: number
+}
