@@ -4,15 +4,15 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 
 function NavBar() {
     return (
-        <nav className="fixed w-full py-2 border-b bg-white z-20">
+        <nav className="fixed w-full py-2 border-b bg-slate-700 z-20">
             <div className={"flex justify-between px-10"}>
-                <AppLogo size={30} className={"text-lg"}/>
+                <AppLogo size={30} className={"text-lg text-white"} />
                 <div className={"flex items-center"}>
                     <Avatar className={"size-6"}>
                         <AvatarImage src="https://github.com/shadcn.png"/>
                         <AvatarFallback>CN</AvatarFallback>
                     </Avatar>
-                    <Button variant={"ghost"} className={"text-md font-semibold"}> Logout </Button>
+                    <Button variant={"ghost"} className={"text-md font-semibold text-white"}> Logout </Button>
                 </div>
             </div>
         </nav>
