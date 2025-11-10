@@ -1,4 +1,4 @@
-import {getPosts} from "@/app/posts/actions";
+import {getPosts} from "@/app/home/actions";
 import PostItem from "@/components/post/post-item";
 
 export default async function Posts() {

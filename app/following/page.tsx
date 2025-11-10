@@ -4,7 +4,8 @@ import {InfoIcon} from "lucide-react";
 
 export default function  FollowingPage() {
     return (
-        <div className={"flex flex-row w-full h-full"}>
+        <div className={"flex flex-row w-full h-full divide-x"}>
+
             <div className={"w-[70%] h-full overflow-y-auto"}>
                 <div className={"max-w-2xl mx-auto py-18 divide-y"}>
                     {
@@ -14,6 +15,7 @@ export default function  FollowingPage() {
                     }
                 </div>
             </div>
+
             <div className={"w-[30%] h-full"}>
                 <div className={"pt-18 flex flex-col"}>
                     <div className={"border-b px-4 pt-2 pb-6"}>
@@ -27,6 +29,7 @@ export default function  FollowingPage() {
                     </div>
                 </div>
             </div>
+
         </div>
     )
 }

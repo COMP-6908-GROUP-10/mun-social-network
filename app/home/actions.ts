@@ -1,4 +1,50 @@
+"use server";
+
 import {Comment, Post} from "@/lib/models";
+import sqlDb from "@/db/sql-db";
+
+interface GetPostsInput {
+    user_id?: number;
+    limit?: number;
+    offset?: number;
+}
+
+export async function getDBPosts(input?: GetPostsInput) {
+    const { user_id, limit = 20, offset = 0 } = input || {};
+
+    // SQL query combining home, users, likes, and comments
+    const stmt = sqlDb.prepare(`
+          SELECT
+            p.post_id,
+            p.content,
+            p.media_url,
+            p.created_at,
+            u.username AS author,
+            u.user_id AS author_id,
+            COUNT(DISTINCT pl.like_id) AS like_count,
+            COUNT(DISTINCT c.comment_id) AS comment_count
+          FROM posts p
+          JOIN users u ON p.user_id = u.user_id
+          LEFT JOIN post_likes pl ON p.post_id = pl.post_id
+          LEFT JOIN comments c ON p.post_id = c.post_id
+          ${user_id ? "WHERE p.user_id = :user_id" : ""}
+          GROUP BY p.post_id
+          ORDER BY p.created_at DESC
+          LIMIT :limit OFFSET :offset
+        `);
+
+    const posts = stmt.all({
+        user_id,
+        limit,
+        offset,
+    });
+
+    return {
+        success: true,
+        posts,
+    };
+}
+
 
 
 export async function getPosts() : Promise<Post[]> {
@@ -7,7 +53,7 @@ export async function getPosts() : Promise<Post[]> {
             id: "10000",
             title: "Next Js or React Js",
             content: "Lorem Ipsum is simply dummy text of the printing and typesetting industry. Lorem Ipsum has been the industry's standard dummy text ever since the 1500s, when an unknown printer took a galley of type and scrambled it to make a type specimen book",
-            image: "https://media.licdn.com/dms/image/v2/D5622AQGOapxGdIaB7Q/feedshare-shrink_800/B56ZmLVm5AI0Ak-/0/1758979323819?e=1762387200&v=beta&t=SNaP1L3PqQoP82h4si_k4UF_41lyhLGu2jNI-AM7Dk8",
+            // image: "https://media.licdn.com/dms/image/v2/D5622AQGOapxGdIaB7Q/feedshare-shrink_800/B56ZmLVm5AI0Ak-/0/1758979323819?e=1762387200&v=beta&t=SNaP1L3PqQoP82h4si_k4UF_41lyhLGu2jNI-AM7Dk8",
             user: {
                 name: "Cyndy Matt",
                 department: "MASc Software Engineering"

@@ -1,15 +1,15 @@
 import {Suspense} from "react";
-import Comments from "@/components/comments/comments";
+import Activities from "@/components/activities/activities";
 
-function CommentsContent() {
+function ActivitiesContent() {
 
     return (
         <main className={"px-4 py-8"}>
             <Suspense fallback={<p> loading.. </p>} >
-                <Comments />
+                <Activities />
             </Suspense>
         </main>
     )
 }
 
-export default CommentsContent;
+export default ActivitiesContent;

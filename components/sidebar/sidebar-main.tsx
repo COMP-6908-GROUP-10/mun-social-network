@@ -1,6 +1,6 @@
 
 import {TypographySmall} from "@/components/ui/typography";
-import {ArrowUpFromLineIcon, CableIcon, HouseIcon, LucideIcon, UserRoundPlusIcon} from "lucide-react";
+import {ArrowUpFromLineIcon, CableIcon, CirclePlusIcon, HouseIcon, LucideIcon, UserRoundPlusIcon} from "lucide-react";
 import React from "react";
 import Link from "next/link";
 
@@ -11,13 +11,18 @@ const MENU_ITEMS: { icon: LucideIcon, title: string, href: string }[] = [
         href: "/"
     },
     {
+        icon: CirclePlusIcon,
+        title: "Generate Posts",
+        href: "/create-post"
+    },
+    {
         icon: CableIcon,
-        title: "Connections",
+        title: "Generate Activities",
         href: "/connections"
     },
     {
         icon: UserRoundPlusIcon,
-        title: "Followers",
+        title: "Generate Post Likes",
         href: "/followers"
     },
     {

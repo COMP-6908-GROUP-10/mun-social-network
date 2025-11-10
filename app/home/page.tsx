@@ -1,10 +1,10 @@
-import CommentsHeader from "@/components/comments/comments-header";
-import CommentsContent from "@/components/comments/comments-content";
+
 import {Suspense} from "react";
 import Posts from "@/components/post/posts";
+import ActivitiesHeader from "@/components/activities/activities-header";
+import ActivitiesContent from "@/components/activities/activities-content";
 
 export default function HomePage() {
-
 
   return (
       <Suspense fallback={<div>Loading...</div>}>
@@ -14,8 +14,8 @@ export default function HomePage() {
               </div>
               <div className={"w-[30%] h-full overflow-y-auto"}>
                   <div className={"pt-18 flex flex-col"}>
-                      <CommentsHeader/>
-                      <CommentsContent/>
+                      <ActivitiesHeader/>
+                      <ActivitiesContent/>
                   </div>
               </div>
           </main>

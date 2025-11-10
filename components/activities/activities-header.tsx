@@ -1,6 +1,6 @@
 import {TypographyLarge} from "@/components/ui/typography";
 
-function CommentsHeader() {
+function ActivitiesHeader() {
     return (
         <main className={"border-b px-4 pt-2 pb-6"}>
             <TypographyLarge> <strong>Comments</strong> 3.3k </TypographyLarge>
@@ -8,4 +8,4 @@ function CommentsHeader() {
     )
 }
 
-export default CommentsHeader;
+export default ActivitiesHeader;

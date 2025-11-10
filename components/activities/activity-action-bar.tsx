@@ -1,6 +1,6 @@
 import {LucideIcon, MessageCircleIcon, ThumbsUpIcon} from "lucide-react";
 
-function CommentActionBar() {
+function ActivityActionBar() {
     return (
         <div className={"flex flex-row gap-4"}>
             <CommentActionItem icon={ThumbsUpIcon} text={"1.4 k"} />
@@ -28,4 +28,4 @@ function CommentActionItem({ icon, text, textColor } : { icon?: LucideIcon, text
     )
 }
 
-export default CommentActionBar;
+export default ActivityActionBar;

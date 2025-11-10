@@ -2,10 +2,10 @@ import {Avatar, AvatarFallback, AvatarImage} from "@/components/ui/avatar";
 import {MoreVerticalIcon} from "lucide-react";
 import {Comment} from "@/lib/models";
 import {TypographySmall} from "@/components/ui/typography";
-import CommentActionBar from "@/components/comments/comment-action-bar";
 import {Button} from "@/components/ui/button";
+import ActivityActionBar from "@/components/activities/activity-action-bar";
 
-function CommentItem({ comment }: { comment: Comment }) {
+function ActivityItem({ comment }: { comment: Comment }) {
     return (
         <div className={"flex flex-row justify-between"}>
             <div className={"flex gap-4"}>
@@ -19,7 +19,7 @@ function CommentItem({ comment }: { comment: Comment }) {
                         <small className={"text-xs text-muted-foreground"}>1w ago</small>
                     </div>
                     <TypographySmall className={"leading-normal"}> { comment.message } </TypographySmall>
-                    <CommentActionBar />
+                    <ActivityActionBar />
                 </div>
             </div>
 
@@ -30,4 +30,4 @@ function CommentItem({ comment }: { comment: Comment }) {
     )
 }
 
-export default CommentItem;
+export default ActivityItem;

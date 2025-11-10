@@ -6,7 +6,7 @@ import ConnectionItem from "@/components/ui/connection-item";
 
 function ConnectionsPage() {
     return (
-        <div className={"flex flex-row w-full h-full"}>
+        <div className={"flex flex-row w-full h-full divide-x"}>
             <div className={"w-[70%] h-full overflow-y-auto"}>
                 <div className={"max-w-2xl mx-auto py-18 divide-y"}>
                     {

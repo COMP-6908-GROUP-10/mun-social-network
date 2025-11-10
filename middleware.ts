@@ -1,7 +1,8 @@
-import {NextRequest, NextResponse} from "next/server";
+import {NextResponse} from "next/server";
 
-export async function middleware(request: NextRequest) {
-    NextResponse.next()
+export async function middleware() {
+    // all other session required pages
+    return NextResponse.next()
 }
 
 export const config = {
