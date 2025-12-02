@@ -19,7 +19,7 @@ The goal is to understand *where relational databases perform well*, *where grap
 
 ---
 
-## 📌 Project Purpose
+## Project Purpose
 
 Relational and graph databases are optimized for different workloads:
 
@@ -43,7 +43,7 @@ npm run start
 
 ---
 
-## 📊 Social-Network Dataset Generation
+## Social-Network Dataset Generation
 
 To test deep traversal and relationship-dense operations, the experiment generates:
 
@@ -78,7 +78,7 @@ This workload stresses:
 
 ---
 
-## 🧪 Benchmark Workloads
+## Benchmark Workloads
 
 All operations are executed with identical parameters on both engines and logged with a shared correlation ID.
 
@@ -125,7 +125,7 @@ Measures aggregation and fan-out behaviour.
 
 ---
 
-## 📈 Metrics Collected
+## Metrics Collected
 
 For every experiment run:
 
@@ -147,7 +147,7 @@ The structure is designed around **data generation → execution → logging →
 
 ---
 
-## 🧠 What This Project Demonstrates
+## What This Project Demonstrates
 
 This benchmarking environment helps answer:
 
@@ -168,7 +168,7 @@ These questions are investigated using workloads typical of:
 
 ---
 
-## ▶️ Running the Experiments
+## Running the Experiments
 
 1. Generate users
 2. Generate posts
@@ -183,7 +183,7 @@ Each run logs performance metrics for later analysis.
 
 ---
 
-## 📄 Summary
+## Summary
 
 This project is a **database comparison study**, not a traditional software platform.  
 Its purpose is to evaluate:
