@@ -1,4 +1,4 @@
-import PostItem from "@/components/post/post-item";
+import PostItem from "@/components/posts/post-item";
 import ConnectionItem from "@/components/ui/connection-item";
 import {TypographyLarge, TypographySmall} from "@/components/ui/typography";
 import {InfoIcon} from "lucide-react";
@@ -10,7 +10,7 @@ export default function  FollowersPage() {
                 <div className={"max-w-2xl mx-auto py-18 divide-y"}>
                     {
                         Array.from({length: 50}).map((_, i) => (
-                            <ConnectionItem key={"post-item-" + i}></ConnectionItem>
+                            <ConnectionItem key={"posts-item-" + i}></ConnectionItem>
                         ))
                     }
                 </div>

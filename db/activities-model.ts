@@ -3,6 +3,7 @@ import { Schema, model, models } from 'mongoose';
 export interface IActivity {
     // grouping / identity
     correlationId: string; // to group multiple runs of the same experiment
+    stepId?: string;
     queryName: string;     // e.g. "fetch_comments_for_post"
     engine: 'sqlite' | 'neo4j';
     datasetScale: number;  // 1, 5, 10
@@ -39,6 +40,7 @@ export interface IActivity {
 const activitySchema = new Schema<IActivity>(
     {
         correlationId: { type: String, index: true, required: true },
+        stepId: { type: String, required: false },
         queryName: { type: String, required: true },
         engine: { type: String, enum: ['sqlite', 'neo4j'], required: true },
         datasetScale: { type: Number, required: true },
@@ -50,8 +52,8 @@ const activitySchema = new Schema<IActivity>(
         serverReportedMs: { type: Number },
         rowsReturned: { type: Number },
 
-        sqliteExplain: { type: Schema.Types.Mixed },
-        neo4jProfile: { type: Schema.Types.Mixed },
+        sqliteExplain: { type: Schema.Types.String },
+        neo4jProfile: { type: Schema.Types.String },
 
         success: { type: Boolean, default: true },
         errorMessage: { type: String },
@@ -70,5 +72,4 @@ const activitySchema = new Schema<IActivity>(
 );
 
 // fix the model line
-export const ActivityModel =
-    models.Activity || model<IActivity>('Activity', activitySchema);
+export const ActivityModel = models.Activity<IActivity> ||  model<IActivity>('Activity', activitySchema);

@@ -10,7 +10,7 @@ export default function  FollowingPage() {
                 <div className={"max-w-2xl mx-auto py-18 divide-y"}>
                     {
                         Array.from({length: 50}).map((_, i) => (
-                            <ConnectionItem key={"post-item-" + i}></ConnectionItem>
+                            <ConnectionItem key={"posts-item-" + i}></ConnectionItem>
                         ))
                     }
                 </div>

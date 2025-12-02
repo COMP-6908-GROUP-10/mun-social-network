@@ -4,6 +4,7 @@ import "./globals.css";
 import NavBar from "@/components/nav/nav-bar";
 import SidebarMain from "@/components/sidebar/sidebar-main";
 import {ReactNode} from "react";
+import {Toaster} from "sonner";
 
 const questrial = Questrial({
     weight: "400",
@@ -33,7 +34,7 @@ export default function RootLayout({ children,}: Readonly<{ children: ReactNode;
 
             </div>
         </main>
-
+        <Toaster />
         </body>
     </html>
   );

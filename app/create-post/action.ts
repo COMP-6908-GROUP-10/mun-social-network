@@ -17,7 +17,7 @@ export const createPost = async (input: CreatePostInput)=>  {
         throw new Error("user_id and content are required");
     }
 
-    // SQL to Insert new post
+    // SQL to Insert new posts
     const insertStmt = sqlDb.prepare(`
       INSERT INTO posts (user_id, title, content, media_url)
       VALUES (:user_id, :title, :content, :media_url)
@@ -39,7 +39,7 @@ export const createPost = async (input: CreatePostInput)=>  {
 
     return {
         success: true,
-        message: "Post created successfully",
+        message: "IPost created successfully",
         post: newPost,
     };
 }

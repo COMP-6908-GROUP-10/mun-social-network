@@ -1,25 +1,29 @@
+"use client"
 
+
+import {QueryClientProvider} from "@tanstack/react-query";
+import {appQueryClient} from "@/lib/constants";
+import Posts from "@/components/posts/posts";
+import PostActionSection from "@/components/post-actions/post-action-section";
 import {Suspense} from "react";
-import Posts from "@/components/post/posts";
-import ActivitiesHeader from "@/components/activities/activities-header";
-import ActivitiesContent from "@/components/activities/activities-content";
 
 export default function HomePage() {
 
   return (
-      <Suspense fallback={<div>Loading...</div>}>
+      <QueryClientProvider client={appQueryClient}>
           <main className={"w-full flex h-full divide-x"}>
               <div className={"w-[70%] h-full overflow-y-auto"}>
-                  <Posts />
+                  <Suspense fallback={null}>
+                      <Posts />
+                  </Suspense>
               </div>
               <div className={"w-[30%] h-full overflow-y-auto"}>
-                  <div className={"pt-18 flex flex-col"}>
-                      <ActivitiesHeader/>
-                      <ActivitiesContent/>
-                  </div>
+                  <Suspense fallback={null}>
+                      <PostActionSection />
+                  </Suspense>
               </div>
           </main>
-      </Suspense>
+      </QueryClientProvider>
 
   );
 }
