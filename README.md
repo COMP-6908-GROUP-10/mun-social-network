@@ -34,7 +34,7 @@ This project evaluates those differences by executing **realistic social-network
 
 ---
 
-## Setting up the prject
+## Setting up the project
 ```bash
 npm install
 npm run build
@@ -70,6 +70,7 @@ Comment Level 0
 └─ Reply Level 1
 └─ Reply Level 2
 └─ Reply Level 3
+...
 
 This workload stresses:
 
@@ -135,7 +136,7 @@ For every experiment run:
 - Query text (SQL + Cypher)
 - Run repetition number
 - Dataset scale
-- Engine used (SQLite or Neo4j)
+- Engine used (SQLite and Neo4j)
 
 All results are stored, visualized, and can be compared across runs.
 
