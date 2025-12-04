@@ -195,6 +195,6 @@ Its purpose is to evaluate:
 - Costs of recursion, joins, and traversal
 - Real-world applicability of each engine to connected data problems
 
-SQLite and Neo4j each have strengths—this environment makes those strengths measurable and comparable.
+SQLite and Neo4j each have strengths and this environment makes those strengths measurable and comparable.
 
 ---
