@@ -291,13 +291,13 @@ async function createCommentsGraphBatched(
     const engine = "neo4j";
     const session = graphDBSession();
 
-    // Flatten arrays
     const flat = levels.flat();
 
-    // Build payloads
+    // Include user_identifier in the payload
     const commentsPayload = flat.map((c) => ({
         identifier: c.identifier,
         content: c.content,
+        user_identifier: c.user_identifier,
     }));
 
     const parentIds = levels[0].map((c) => c.identifier);
@@ -306,21 +306,20 @@ async function createCommentsGraphBatched(
         .filter((c) => c.parent_fake_id !== null)
         .map((c) => ({
             child: c.identifier,
-            parent: levels[c.depth - 1][(c.fake_id - 1) % levels[c.depth - 1].length].identifier,
+            parent:
+            levels[c.depth - 1][(c.fake_id - 1) % levels[c.depth - 1].length]
+                .identifier,
         }));
-
-    // NOTE: Parent mapping above assumes the same pairing as in buildLevelOrderedSeeds:
-    //       parent for seed at index i in level d is level (d-1)[i % dataScale].
-    //       We already ensured that structure when generating seeds.
 
     const start = process.hrtime.bigint();
 
     await session.executeWrite(async (tx) => {
-        // 1) Create all Comment nodes
+        // 1) Create all Comment nodes with their COMMENTED_BY edges
         await tx.run(
             `
       UNWIND $comments AS c
-      CREATE (:Comment {
+      MATCH (u:User {identifier: c.user_identifier})
+      CREATE (u)<-[:COMMENTED_BY]-(:Comment {
         identifier: c.identifier,
         content: c.content,
         created_at: datetime()
@@ -329,7 +328,7 @@ async function createCommentsGraphBatched(
             { comments: commentsPayload }
         );
 
-        // 2) Attach ONLY parents to Post via ON_POST (Pattern B)
+        // 2) Attach parents to Post
         await tx.run(
             `
       MATCH (p:Post {identifier: $post_identifier})
@@ -340,7 +339,7 @@ async function createCommentsGraphBatched(
             { post_identifier, parents: parentIds }
         );
 
-        // 3) Create REPLY_TO edges for all child→parent pairs
+        // 3) Create REPLY_TO edges for replies
         if (replyEdges.length > 0) {
             await tx.run(
                 `

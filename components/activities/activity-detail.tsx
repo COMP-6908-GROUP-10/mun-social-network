@@ -14,6 +14,10 @@ import ListLoader from "@/components/ui/list-loader";
 import ActivityQueryStatement from "@/components/activities/activity-query-statement";
 import ActivityDetailGraphs from "@/components/activities/activity-detail-graphs";
 import ActivityDetailDevRemarks from "@/components/activities/activity-detail-dev-remarks";
+import ActivityHeading from "@/components/activities/activity-heading";
+import {usePrintViewStore} from "@/store/full-screen-state";
+import ActivityDetailFindings from "@/components/activities/activity-detail-findings";
+import ActivityDataVerification from "@/components/activities/activity-data-verification";
 
 
 export default function ActivityDetail() {
@@ -23,6 +27,7 @@ export default function ActivityDetail() {
         queryKey: ["activity-by-correlation-id", cid],
         queryFn: () => fetchActivityByCorrelationId(cid)
     })
+    const fullScreen = usePrintViewStore(state => state.printView);
 
 
     if (isPending) {
@@ -58,11 +63,15 @@ export default function ActivityDetail() {
         );
     }
 
+
     return (
         <div key={`activity-detail-${data.correlationId}`} className={"h-full overflow-y-auto flex flex-col gap-4"}>
 
-            <ActivityQueryStatement correlation={data} />
+            <ActivityHeading queryName={data.queryName} ></ActivityHeading>
+            { !fullScreen && <ActivityQueryStatement correlation={data} /> }
             <ActivityDetailGraphs correlation={data} />
+            <ActivityDataVerification correlation={data} />
+            <ActivityDetailFindings queryName={data.queryName} />
             <ActivityDetailDevRemarks queryName={data.queryName} />
         </div>
 

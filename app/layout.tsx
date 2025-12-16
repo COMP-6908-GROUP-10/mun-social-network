@@ -5,6 +5,8 @@ import NavBar from "@/components/nav/nav-bar";
 import SidebarMain from "@/components/sidebar/sidebar-main";
 import {ReactNode} from "react";
 import {Toaster} from "sonner";
+import {SidebarLayout} from "@/components/sidebar/sidebar-layout";
+import ContentLayout from "@/components/content/content-layout";
 
 const questrial = Questrial({
     weight: "400",
@@ -17,25 +19,21 @@ export const metadata: Metadata = {
 }
 
 export default function RootLayout({ children,}: Readonly<{ children: ReactNode; }>) {
-  return (
-    <html lang="en">
-        <body
-            className={`${questrial.className}`}
-        >
-        <main>
-            <NavBar/>
-            <div className={"flex divide-x h-screen"}>
-                <div className={"w-[15%] overflow-y-auto"}>
-                    <SidebarMain/>
-                </div>
-                <div className={"w-[85%] h-full"}>
-                    {children}
-                </div>
 
-            </div>
-        </main>
-        <Toaster />
-        </body>
-    </html>
+    return (
+        <html lang="en">
+            <body
+                className={`${questrial.className}`}
+            >
+            <main>
+                <NavBar/>
+                <div className={"flex divide-x h-screen"}>
+                    <SidebarLayout />
+                    <ContentLayout>{ children }</ContentLayout>
+                </div>
+            </main>
+            <Toaster />
+            </body>
+        </html>
   );
 }

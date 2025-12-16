@@ -13,15 +13,6 @@ type RawFollowerRow = Omit<IFollow, "follower"> & {
 };
 
 export interface FetchFollowersParams {
-    userId: number;                 // the person being followed
-    limit?: number;
-    offset?: number;
-    cachePhase?: "cold" | "warm";
-    correlationId?: string;
-}
-
-
-export interface FetchFollowersParams {
     userId: number;
     limit?: number;
     offset?: number;
@@ -36,15 +27,17 @@ export async function runFetchFollowersExperiment(
         offset = 0,
         cachePhase = "cold",
         correlationId,
-    }: FetchFollowersParams
+        engine = "sql",
+    }: FetchFollowersParams & { engine?: string }
 ): Promise<FetchActivityResults<IFollow>> {
 
     const queryName = "fetch_followers";
     const correlation = correlationId || randomUUID();
     const stepId = randomUUID();
 
-    console.log(`\n🧪 ${queryName}`);
-    console.log({ queryName, correlation, stepId, userId, limit, offset, cachePhase });
+    console.log(`\n🧪 ${queryName}`, {
+        correlation, stepId, userId, limit, offset, cachePhase
+    });
 
     if (cachePhase === "cold") {
         sqlDb.pragma("optimize");
@@ -55,7 +48,6 @@ export async function runFetchFollowersExperiment(
         await session.close();
     }
 
-    // SQL → returns actual rows
     const sqlResult = await fetchFollowersSQL(
         userId,
         limit,
@@ -66,7 +58,6 @@ export async function runFetchFollowersExperiment(
         stepId
     );
 
-    // Neo4j → returns same rows (normalized to same shape)
     const graphResult = await fetchFollowersGraph(
         userId,
         limit,
@@ -81,12 +72,16 @@ export async function runFetchFollowersExperiment(
         `✔ SQL=${sqlResult.latencyMs.toFixed(2)} ms | Graph=${graphResult.latencyMs.toFixed(2)} ms`
     );
 
+    const rows = engine === "graph"
+        ? graphResult.rows
+        : sqlResult.rows;
+
     return {
         correlationId: correlation,
         stepId,
         loaded: offset + limit,
-        rows: sqlResult.rows,
-        rowsToDisplay: sqlResult.rows.slice(0, 5),
+        rows,
+        rowsToDisplay: rows.slice(0, 5),
         hasMore: true,
     };
 }
@@ -115,14 +110,14 @@ async function fetchFollowersSQL(
                 'created_at', u.created_at,
 
                 'followers_count', (
-                    SELECT COUNT(*) 
-                    FROM followers ff 
+                    SELECT COUNT(*)
+                    FROM followers ff
                     WHERE ff.followed_id = u.user_id
                 ),
 
                 'following_count', (
-                    SELECT COUNT(*) 
-                    FROM followers ff2 
+                    SELECT COUNT(*)
+                    FROM followers ff2
                     WHERE ff2.follower_id = u.user_id
                 )
             ) AS follower
@@ -152,6 +147,19 @@ async function fetchFollowersSQL(
         follower: JSON.parse(r.follower),
     }));
 
+    // ✅ total followers for parity
+    const totalFollowers = sqlDb.prepare(`
+        SELECT COUNT(*) AS cnt
+        FROM followers
+        WHERE followed_id = ?
+    `).get(userId) as { cnt: number };
+
+    const params =  {
+        userId,
+        limit,
+        offset,
+        sqlFollowersCount: rows.length
+    }
     await ActivityModel.create({
         correlationId,
         stepId,
@@ -163,12 +171,15 @@ async function fetchFollowersSQL(
         latencyMs,
         success: true,
         rowsReturned: rows.length,
-        params: { userId, limit, offset },
+        params: params,
         sqliteExplain: sqlStatement,
     });
 
+    console.log("graph params", params)
+
     return { latencyMs, success: true, rows };
 }
+
 
 async function fetchFollowersGraph(
     userId: number,
@@ -181,30 +192,29 @@ async function fetchFollowersGraph(
 ) {
     const session = graphDBSession();
 
-    // SQL → identifier lookup
-    const postRow = sqlDb
+    const userRow = sqlDb
         .prepare("SELECT identifier FROM users WHERE user_id = ?")
         .get(userId) as { identifier: string } | undefined;
 
-    if (!postRow) {
+    if (!userRow) {
         await session.close();
         throw new Error(`User id=${userId} not found.`);
     }
 
-    const identifier = postRow.identifier;
+    const identifier = userRow.identifier;
 
     const cypher = `
-        MATCH (follower:User)-[:FOLLOWS]->(followed:User { identifier: $identifier })
-        
-        WITH follower, followed, 
+        MATCH (follower:User)-[r:FOLLOWS]->(followed:User { identifier: $identifier })
+
+        WITH follower, r,
              COUNT { (follower)<-[:FOLLOWS]-(:User) } AS followers_count,
              COUNT { (follower)-[:FOLLOWS]->(:User) } AS following_count
-        
+
         RETURN {
             follower_id: follower.user_id,
-            followed_id: followed.user_id,
+            followed_id: null,
             identifier: follower.identifier,
-            created_at: toString(follower.created_at),
+            created_at: toString(r.created_at),
             follower: {
                 user_id: follower.user_id,
                 username: follower.username,
@@ -215,10 +225,9 @@ async function fetchFollowersGraph(
                 following_count: following_count
             }
         } AS row
-        
-        ORDER BY follower.created_at DESC
-        SKIP $offset LIMIT $limit
 
+        ORDER BY r.created_at DESC
+        SKIP $offset LIMIT $limit
     `;
 
     const start = process.hrtime.bigint();
@@ -231,8 +240,34 @@ async function fetchFollowersGraph(
 
     const latencyMs = Number(end - start) / 1_000_000;
 
-    const rows: IFollow[] = result.records.map((rec) => rec.get("row"));
+    const rows: IFollow[] = result.records.map((rec) => {
+        const row = rec.get("row");
+        return {
+            follower_id: row.follower_id,
+            followed_id: userId,
+            identifier: row.identifier,
+            created_at: row.created_at,
+            follower: row.follower,
+        };
+    });
 
+    // ✅ total followers for parity
+    const countResult = await session.run(
+        `
+        MATCH (:User)-[:FOLLOWS]->(u:User { identifier: $identifier })
+        RETURN COUNT(*) AS cnt
+        `,
+        { identifier }
+    );
+
+    // const graphFollowersCount = countResult.records[0].get("cnt").toNumber();
+
+    const params = {
+        userId,
+        limit,
+        offset,
+        graphFollowersCount: rows.length,
+    }
     await ActivityModel.create({
         correlationId,
         stepId,
@@ -244,11 +279,12 @@ async function fetchFollowersGraph(
         latencyMs,
         success: true,
         rowsReturned: rows.length,
-        params: { userId, limit, offset },
+        params: params,
         neo4jProfile: cypher,
     });
-
+    console.log("graph params", params)
     await session.close();
 
     return { latencyMs, success: true, rows };
 }
+

@@ -10,18 +10,6 @@ import { IUser } from "@/lib/model-types";
 
 // =====================================================
 // CREATE FOLLOWERS EXPERIMENT (SQLite + Neo4j)
-// Based strictly on REAL SQL schema
-// =====================================================
-
-interface ICreateFollowersExperimentParams {
-    followedUserId: number;          // the user being followed
-    dataScales?: number[];
-    repetitions?: number;
-    cachePhase?: "cold" | "warm";
-}
-
-// =====================================================
-// CREATE FOLLOWERS EXPERIMENT (SQLite + Neo4j)
 // Fully aligned with IFollow + SQL schema + experiment patterns
 // =====================================================
 
@@ -33,14 +21,6 @@ interface ICreateFollowersExperimentParams {
 }
 
 interface FollowerRow {
-    follower_id: number;                 // SQL value
-    followed_id: number;                 // SQL value
-    identifier: string;                  // follower row UUID
-    follower_identifier: string;         // for Neo4j
-    followed_identifier: string;         // for Neo4j
-}
-
-interface FollowerRow {
     follower_id: number;
     followed_id: number;
     identifier: string;
@@ -48,16 +28,6 @@ interface FollowerRow {
     followed_identifier: string;
 }
 
-// ===============================
-// TYPES
-// ===============================
-interface FollowerRow {
-    follower_id: number;
-    followed_id: number;
-    identifier: string;
-    follower_identifier: string;
-    followed_identifier: string;
-}
 
 // ===============================
 // MAIN EXPERIMENT
@@ -218,6 +188,13 @@ async function createFollowersSQL(
 
     const latencyMs = Number(end - start) / 1_000_000;
 
+    // ✅ count actual followers for parity
+    const totalFollowers = sqlDb.prepare(`
+        SELECT COUNT(*) AS cnt
+        FROM followers
+        WHERE followed_id = ?
+    `).get(batch[0].followed_id) as { cnt: number };
+
     await ActivityModel.create({
         correlationId,
         queryName,
@@ -227,13 +204,17 @@ async function createFollowersSQL(
         runIndex,
         latencyMs,
         success: true,
-        rowsReturned: 0,
-        params: { count: batch.length, dataScale, runIndex, cachePhase },
+        rowsReturned: batch.length,
+        params: {
+            followedUserId: batch[0].followed_id,
+            sqlFollowersCount: totalFollowers.cnt,
+        },
         sqliteExplain: sql,
     });
 
     return { latencyMs, success: true };
 }
+
 
 //
 // ===============================
@@ -253,7 +234,8 @@ async function createFollowersGraph(
     const cypher = `
         MATCH (follower:User { identifier: $follower_identifier })
         MATCH (followed:User { identifier: $followed_identifier })
-        MERGE (follower)-[:FOLLOWS]->(followed)
+        MERGE (follower)-[r:FOLLOWS]->(followed)
+        ON CREATE SET r.created_at = datetime()
     `;
 
     const start = process.hrtime.bigint();
@@ -270,6 +252,17 @@ async function createFollowersGraph(
     const end = process.hrtime.bigint();
     const latencyMs = Number(end - start) / 1_000_000;
 
+    // ✅ count actual followers for parity
+    const countResult = await session.run(
+        `
+        MATCH (:User)-[:FOLLOWS]->(u:User { identifier: $followed_identifier })
+        RETURN COUNT(*) AS cnt
+        `,
+        { followed_identifier: batch[0].followed_identifier }
+    );
+
+    const graphFollowersCount = countResult.records[0].get("cnt").toNumber();
+
     await session.close();
 
     await ActivityModel.create({
@@ -281,11 +274,15 @@ async function createFollowersGraph(
         runIndex,
         latencyMs,
         success: true,
-        rowsReturned: 0,
-        params: { count: batch.length, dataScale, runIndex, cachePhase },
+        rowsReturned: batch.length,
+        params: {
+            followedUserId: batch[0].followed_id,
+            graphFollowersCount,
+        },
         neo4jProfile: cypher,
     });
 
     return { latencyMs, success: true };
 }
+
 

@@ -13,6 +13,7 @@ import {appQueryClient} from "@/lib/constants";
 import UsersListDialog from "@/components/users/users-list-dialog";
 import {useEventStore} from "@/store/events-store";
 import {cn} from "@/lib/utils";
+import SwitchEngine from "@/components/sidebar/switch-engine";
 
 const MENU_ITEMS: { icon: LucideIcon, title: string, href: string }[] = [
     {
@@ -112,8 +113,15 @@ function SidebarMain() {
 
     return (
         <QueryClientProvider client={appQueryClient}>
-            <div className={"w-full h-full pt-18 "}>
+            <div className={"w-full h-full pt-16 "}>
+
                 <ul className={"list-none overflow-x-auto"}>
+                    {
+                       pathname === "/" &&
+                        (<li className={cn("cursor-pointer hover:bg-slate-50 px-10 py-5")}>
+                            <SwitchEngine/>
+                        </li>)
+                    }
                     {
                         MENU_ITEMS.map((item) => {
                             const Icon = item.icon
@@ -148,7 +156,7 @@ function SidebarMain() {
                     description={"Run experiment to generate users for sql and graph database engines"}
                     ref={usersConfigRef}
                     onSubmit={runCreateUsers}
-                    onSuccess={ handleCreateUsersSuccess }
+                    onSuccess={handleCreateUsersSuccess}
                 />
                 <CreateActivityConfigFormDialog
                     key={"create-posts-config-form"}
@@ -157,9 +165,9 @@ function SidebarMain() {
                     ref={postsConfigRef}
                     // includes={[CreateActivityConfigInclude.USER_ID]}
                     onSubmit={runCreatePosts}
-                    onSuccess={ handleCreatePostsSuccess }
+                    onSuccess={handleCreatePostsSuccess}
                 />
-                <UsersListDialog ref={usersListRef} />
+                <UsersListDialog ref={usersListRef}/>
             </div>
         </QueryClientProvider>
     )

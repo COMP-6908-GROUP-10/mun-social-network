@@ -8,7 +8,6 @@ import { graphDBSession } from "@/db/neo4j-db";
 import { IPost } from "@/lib/model-types";
 import {IJsonResponse} from "@/lib/types";
 import { Statement } from "better-sqlite3";
-import {ResultSummary} from "neo4j-driver";
 import {generateRandomUsers, pickRandomUser} from "@/actions/utils/random-users";
 
 

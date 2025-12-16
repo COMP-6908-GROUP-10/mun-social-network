@@ -133,3 +133,9 @@
   background-color: transparent;
   border-radius: 9999px;
 }
+
+@layer utilities {
+  .recharts-cartesian-axis-tick text {
+    fill: #000 !important;
+  }
+}

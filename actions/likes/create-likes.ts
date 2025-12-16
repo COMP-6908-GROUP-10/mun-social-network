@@ -5,7 +5,7 @@ import { randomUUID } from "crypto";
 import { ActivityModel } from "@/db/activities-model";
 import { graphDBSession } from "@/db/neo4j-db";
 import {IJsonResponse} from "@/lib/types";
-import {generateRandomUsers, pickRandomUser} from "../utils/random-users";
+import {generateRandomUsers} from "../utils/random-users";
 
 interface ICreateLikesExperimentParams {
     postId: number;                  // the post being liked
@@ -38,9 +38,6 @@ export async function runCreateLikesExperiment(
 
     console.log(`🧪 Starting ${queryName} experiment → postId=${postId}`);
 
-    // -----------------------------------------------------
-    // 1. Fetch post (SQL → Neo4j uses identifier)
-    // -----------------------------------------------------
     const postRow = sqlDb.prepare(`
         SELECT post_id, identifier
         FROM posts
@@ -53,22 +50,12 @@ export async function runCreateLikesExperiment(
 
     const postIdentifier = postRow.identifier;
 
-    // -----------------------------------------------------
-    // 2. Load ENOUGH users ONCE for the entire experiment
-    // -----------------------------------------------------
     const maxScale = Math.max(...dataScales);
     const totalNeeded = maxScale * repetitions;
 
-    console.log(`→ Loading ${totalNeeded} random users...`);
-
     const selectedUsers = await generateRandomUsers(totalNeeded);
-
-    // Cursor walks through selectedUsers deterministically:
     let cursor = 0;
 
-    // -----------------------------------------------------
-    // 3. Main loops (SQL + Graph)
-    // -----------------------------------------------------
     for (const dataScale of dataScales) {
         for (let runIndex = 1; runIndex <= repetitions; runIndex++) {
 
@@ -81,21 +68,12 @@ export async function runCreateLikesExperiment(
                 await neo.close();
             }
 
-            // Slice EXACTLY dataScale users for this run
             const end = cursor + dataScale;
             const usersForThisRun = selectedUsers.slice(cursor, end);
             cursor = end;
 
-            if (usersForThisRun.length === 0) {
-                console.warn("⚠️ No more users available for this run. Skipping.");
-                continue;
-            }
+            if (usersForThisRun.length === 0) continue;
 
-            console.log(
-                `→ Building batch of ${usersForThisRun.length} likes (scale=${dataScale})`
-            );
-
-            // Build LikeRow batch cleanly (no duplicates possible)
             const batch: LikeRow[] = usersForThisRun.map((u) => ({
                 post_id: postRow.post_id,
                 user_id: u.user_id!,
@@ -104,9 +82,6 @@ export async function runCreateLikesExperiment(
                 post_identifier: postIdentifier,
             }));
 
-            // -----------------------------------------------------
-            // 4. Execute SQL + Graph
-            // -----------------------------------------------------
             const sqlResult = await createLikesSQL(
                 batch,
                 batch.length,
@@ -136,6 +111,7 @@ export async function runCreateLikesExperiment(
 
 
 
+
 async function createLikesSQL(
     batch: LikeRow[],
     dataScale: number,
@@ -145,9 +121,9 @@ async function createLikesSQL(
     correlationId: string
 ) {
     const sql = `
-        INSERT OR IGNORE INTO post_likes 
+        INSERT OR IGNORE INTO post_likes
             (post_id, user_id, identifier)
-        VALUES 
+        VALUES
             (:post_id, :user_id, :identifier)
     `;
 
@@ -169,6 +145,13 @@ async function createLikesSQL(
 
     const latencyMs = Number(end - start) / 1_000_000;
 
+    // ✅ Count actual likes after insert (parity metric)
+    const totalLikes = sqlDb.prepare(`
+        SELECT COUNT(*) AS cnt
+        FROM post_likes
+        WHERE post_id = ?
+    `).get(batch[0].post_id) as { cnt: number };
+
     await ActivityModel.create({
         correlationId,
         queryName,
@@ -178,13 +161,17 @@ async function createLikesSQL(
         runIndex,
         latencyMs,
         success: true,
-        rowsReturned: 0,
-        params: { count: batch.length, dataScale, runIndex, cachePhase },
+        rowsReturned: batch.length,
+        params: {
+            postId: batch[0].post_id,
+            sqlLikesCount: totalLikes.cnt,
+        },
         sqliteExplain: sql,
     });
 
     return { latencyMs, success: true };
 }
+
 
 async function createLikesGraph(
     batch: LikeRow[],
@@ -199,11 +186,8 @@ async function createLikesGraph(
     const cypher = `
         MATCH (u:User { identifier: $user_identifier })
         MATCH (p:Post { identifier: $post_identifier })
-        WITH u, p
-        WHERE NOT EXISTS {
-            MATCH (u)-[:LIKED]->(p)
-        }
-        CREATE (u)-[:LIKED]->(p)
+        MERGE (u)-[l:LIKED]->(p)
+        ON CREATE SET l.created_at = datetime()
     `;
 
     const start = process.hrtime.bigint();
@@ -220,6 +204,17 @@ async function createLikesGraph(
     const end = process.hrtime.bigint();
     const latencyMs = Number(end - start) / 1_000_000;
 
+    // ✅ Count actual likes in graph (parity metric)
+    const countResult = await session.run(
+        `
+        MATCH (:User)-[:LIKED]->(p:Post { identifier: $post_identifier })
+        RETURN COUNT(*) AS cnt
+        `,
+        { post_identifier: batch[0].post_identifier }
+    );
+
+    const graphLikesCount = countResult.records[0].get("cnt").toNumber();
+
     await session.close();
 
     await ActivityModel.create({
@@ -231,8 +226,11 @@ async function createLikesGraph(
         runIndex,
         latencyMs,
         success: true,
-        rowsReturned: 0,
-        params: { count: batch.length, dataScale, runIndex, cachePhase },
+        rowsReturned: batch.length,
+        params: {
+            postId: batch[0].post_id,
+            graphLikesCount,
+        },
         neo4jProfile: cypher,
     });
 

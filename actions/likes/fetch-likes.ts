@@ -19,6 +19,7 @@ export interface FetchLikesParams {
     offset?: number;
     cachePhase?: "cold" | "warm";
     correlationId?: string;
+    engine?: string;
 }
 
 export async function runFetchLikesExperiment(
@@ -28,6 +29,7 @@ export async function runFetchLikesExperiment(
         offset = 0,
         cachePhase = "cold",
         correlationId,
+        engine = "sql",
     }: FetchLikesParams
 ): Promise<FetchActivityResults<IPostLike>> {
 
@@ -39,7 +41,6 @@ export async function runFetchLikesExperiment(
         correlation, stepId, postId, limit, offset, cachePhase
     });
 
-    // Cold cache reset
     if (cachePhase === "cold") {
         sqlDb.pragma("optimize");
         sqlDb.pragma("wal_checkpoint(TRUNCATE)");
@@ -49,7 +50,6 @@ export async function runFetchLikesExperiment(
         await session.close();
     }
 
-    // SQL (actual rows)
     const sqlResult = await fetchLikesSQL(
         postId,
         limit,
@@ -60,7 +60,6 @@ export async function runFetchLikesExperiment(
         stepId
     );
 
-    // Neo4j (must match SQL shape)
     const graphResult = await fetchLikesGraph(
         postId,
         limit,
@@ -75,15 +74,18 @@ export async function runFetchLikesExperiment(
         `✔ SQL=${sqlResult.latencyMs.toFixed(2)} ms | Graph=${graphResult.latencyMs.toFixed(2)} ms`
     );
 
+    const rows = engine === "graph" ? graphResult.rows : sqlResult.rows;
+
     return {
         correlationId: correlation,
         stepId,
         loaded: offset + limit,
-        rows: sqlResult.rows,
-        rowsToDisplay: sqlResult.rows.slice(0, 5),
+        rows,
+        rowsToDisplay: rows.slice(0, 5),
         hasMore: true,
     };
 }
+
 
 
 async function fetchLikesSQL(
@@ -109,15 +111,11 @@ async function fetchLikesSQL(
                 'email', u.email,
                 'identifier', u.identifier,
                 'created_at', u.created_at,
-
-                -- followers of this user
                 'followers_count', (
                     SELECT COUNT(*)
                     FROM followers ff
                     WHERE ff.followed_id = u.user_id
                 ),
-
-                -- users this user follows
                 'following_count', (
                     SELECT COUNT(*)
                     FROM followers ff2
@@ -151,6 +149,15 @@ async function fetchLikesSQL(
         user: JSON.parse(r.user),
     }));
 
+    // ✅ total likes for parity
+    const totalLikes = sqlDb.prepare(`
+        SELECT COUNT(*) AS cnt
+        FROM post_likes
+        WHERE post_id = ?
+    `).get(postId) as { cnt: number };
+
+    console.log("graphLikesCount", totalLikes.cnt);
+
     await ActivityModel.create({
         correlationId,
         stepId,
@@ -162,12 +169,18 @@ async function fetchLikesSQL(
         latencyMs,
         success: true,
         rowsReturned: rows.length,
-        params: { postId, limit, offset },
+        params: {
+            postId,
+            limit,
+            offset,
+            sqlLikesCount: rows.length,
+        },
         sqliteExplain: sqlStatement,
     });
 
     return { latencyMs, success: true, rows };
 }
+
 
 
 async function fetchLikesGraph(
@@ -181,7 +194,6 @@ async function fetchLikesGraph(
 ) {
     const session = graphDBSession();
 
-    // get identifier for Neo4j lookup
     const postRow = sqlDb
         .prepare("SELECT identifier FROM posts WHERE post_id = ?")
         .get(postId) as { identifier: string } | undefined;
@@ -194,19 +206,16 @@ async function fetchLikesGraph(
     const post_identifier = postRow.identifier;
 
     const cypher = `
-        MATCH (u:User)-[:LIKED]->(p:Post { identifier: $post_identifier })
-
-        WITH u, p,
+        MATCH (u:User)-[l:LIKED]->(p:Post { identifier: $post_identifier })
+        WITH u, l,
             COUNT { (u)<-[:FOLLOWS]-(:User) } AS followers_count,
             COUNT { (u)-[:FOLLOWS]->(:User) } AS following_count
-        
         RETURN {
             like_id: null,
             post_id: null,
             user_id: u.user_id,
             identifier: u.identifier,
-            created_at: toString(u.created_at),
-        
+            created_at: toString(l.created_at),
             user: {
                 user_id: u.user_id,
                 username: u.username,
@@ -217,8 +226,7 @@ async function fetchLikesGraph(
                 following_count: following_count
             }
         } AS row
-        
-        ORDER BY u.created_at DESC
+        ORDER BY l.created_at DESC
         SKIP $offset LIMIT $limit
     `;
 
@@ -232,19 +240,29 @@ async function fetchLikesGraph(
 
     const latencyMs = Number(end - start) / 1_000_000;
 
-    // Neo must return exact SQL structure
     const rows: IPostLike[] = result.records.map((rec) => {
         const row = rec.get("row");
-
         return {
-            like_id: row.like_id,       // null: graph doesn't store like_id
-            post_id: postId,            // insert SQL post_id
+            like_id: row.like_id,   // null (graph)
+            post_id: postId,        // hydrate SQL id
             user_id: row.user_id,
             identifier: row.identifier,
             created_at: row.created_at,
             user: row.user,
         };
     });
+
+    // ✅ total likes for parity
+    const countResult = await session.run(
+        `
+        MATCH (:User)-[:LIKED]->(p:Post { identifier: $post_identifier })
+        RETURN COUNT(*) AS cnt
+        `,
+        { post_identifier }
+    );
+
+    const graphLikesCount = countResult.records[0].get("cnt").toNumber();
+    console.log("graphLikesCount", graphLikesCount);
 
     await ActivityModel.create({
         correlationId,
@@ -257,7 +275,12 @@ async function fetchLikesGraph(
         latencyMs,
         success: true,
         rowsReturned: rows.length,
-        params: { postId, limit, offset },
+        params: {
+            postId,
+            limit,
+            offset,
+            graphLikesCount: rows.length,
+        },
         neo4jProfile: cypher,
     });
 
@@ -265,3 +288,4 @@ async function fetchLikesGraph(
 
     return { latencyMs, success: true, rows };
 }
+
