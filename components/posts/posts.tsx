@@ -13,6 +13,7 @@ import {Suspense, useCallback, useEffect} from "react";
 import {useEventStore} from "@/store/events-store";
 import {useRouter, useSearchParams} from "next/navigation";
 import {getUuid} from "@/lib/utils";
+import {dbEngine} from "@/lib/constants";
 
 export default function Posts() {
 
@@ -40,7 +41,8 @@ export default function Posts() {
         return runFetchPostsExperiment({
             limit: limit,        // force number
             offset: offset,
-            correlationId: correlationId   // <-- send back to server
+            correlationId: correlationId,   // <-- send back to server
+            engine: localStorage.getItem(dbEngine) || "sql"
         });
     }
 

@@ -1,3 +1,5 @@
+"use client"
+
 import {FetchActivityParams} from "@/lib/types";
 import {runFetchCommentsExperiment} from "@/actions/comments/fetch-comments";
 import useInfiniteLoadHook from "@/hooks/use-infinite-load-hook";
@@ -9,6 +11,7 @@ import PostActionCommentItem from "@/components/post-actions/post-action-comment
 import FetchActivityConfigFormDialog from "@/components/activities/fetch-activity-config-form-dialog";
 import {useEffect} from "react";
 import {useEventStore} from "@/store/events-store";
+import {dbEngine} from "@/lib/constants";
 
 type Props = {
     action?:string | null,
@@ -24,7 +27,8 @@ export default function PostActionContentComments({ action, postId, expId } : Pr
             postId: Number(postId),
             limit: limit,        // force number
             offset: offset,
-            correlationId: correlationId
+            correlationId: correlationId,
+            engine: localStorage.getItem(dbEngine) || "sql"
         });
     }
 

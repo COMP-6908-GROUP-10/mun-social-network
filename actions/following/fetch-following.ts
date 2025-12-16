@@ -8,14 +8,6 @@ import { randomUUID } from "crypto";
 import {ActivityModel} from "@/db/activities-model";
 import neo4j from "neo4j-driver";
 
-export interface FetchFollowingParams {
-    userId: number;
-    limit?: number;
-    offset?: number;
-    cachePhase?: "cold" | "warm";
-    correlationId?: string;
-}
-
 type RawFollowingRow = Omit<IFollow, "followed"> & {
     followed: string; // JSON from sqlite json_object()
 };
@@ -26,6 +18,7 @@ export interface FetchFollowingParams {
     offset?: number;
     cachePhase?: "cold" | "warm";
     correlationId?: string;
+    engine?: string;
 }
 
 export async function runFetchFollowingExperiment(
@@ -35,6 +28,7 @@ export async function runFetchFollowingExperiment(
         offset = 0,
         cachePhase = "cold",
         correlationId,
+        engine = "sql",
     }: FetchFollowingParams
 ): Promise<FetchActivityResults<IFollow>> {
 
@@ -43,11 +37,16 @@ export async function runFetchFollowingExperiment(
     const stepId = randomUUID();
 
     console.log(`\n🧪 ${queryName}`, {
-        correlation, stepId, userId, limit, offset, cachePhase
+        correlation,
+        stepId,
+        userId,
+        limit,
+        offset,
+        cachePhase,
     });
 
     // -------------------------------------------------
-    // Cache resets
+    // Cache reset
     // -------------------------------------------------
     if (cachePhase === "cold") {
         sqlDb.pragma("optimize");
@@ -58,6 +57,9 @@ export async function runFetchFollowingExperiment(
         await session.close();
     }
 
+    // -------------------------------------------------
+    // Execute both engines
+    // -------------------------------------------------
     const sqlResult = await fetchFollowingSQL(
         userId,
         limit,
@@ -82,16 +84,23 @@ export async function runFetchFollowingExperiment(
         `✔ SQL=${sqlResult.latencyMs.toFixed(2)} ms | Graph=${graphResult.latencyMs.toFixed(2)} ms`
     );
 
+    const rows = engine === "graph" ? graphResult.rows : sqlResult.rows;
+
     return {
         correlationId: correlation,
         stepId,
         loaded: offset + limit,
-        rows: sqlResult.rows,
-        rowsToDisplay: sqlResult.rows.slice(0, 5),
+        rows,
+        rowsToDisplay: rows.slice(0, 5),
         hasMore: true,
     };
 }
 
+//
+// ===============================
+// SQLITE IMPLEMENTATION
+// ===============================
+//
 async function fetchFollowingSQL(
     userId: number,
     limit: number,
@@ -115,14 +124,12 @@ async function fetchFollowingSQL(
                 'identifier', u.identifier,
                 'created_at', u.created_at,
 
-                -- followers of the followed user
                 'followers_count', (
                     SELECT COUNT(*)
                     FROM followers ff
                     WHERE ff.followed_id = u.user_id
                 ),
 
-                -- how many people the followed user follows
                 'following_count', (
                     SELECT COUNT(*)
                     FROM followers ff2
@@ -155,6 +162,12 @@ async function fetchFollowingSQL(
         followed: JSON.parse(r.followed),
     }));
 
+    const sqlFollowingCount = sqlDb.prepare(`
+        SELECT COUNT(*) AS cnt
+        FROM followers
+        WHERE follower_id = ?
+    `).get(userId) as { cnt: number };
+
     await ActivityModel.create({
         correlationId,
         stepId,
@@ -166,13 +179,23 @@ async function fetchFollowingSQL(
         latencyMs,
         success: true,
         rowsReturned: rows.length,
-        params: { userId, limit, offset },
+        params: {
+            userId,
+            limit,
+            offset,
+            sqlFollowingCount: sqlFollowingCount.cnt,
+        },
         sqliteExplain: sqlStatement,
     });
 
     return { latencyMs, success: true, rows };
 }
 
+//
+// ===============================
+// NEO4J IMPLEMENTATION
+// ===============================
+//
 async function fetchFollowingGraph(
     userId: number,
     limit: number,
@@ -197,17 +220,17 @@ async function fetchFollowingGraph(
     const identifier = row.identifier;
 
     const cypher = `
-        MATCH (follower:User { identifier: $identifier })-[:FOLLOWS]->(followed:User)
+        MATCH (follower:User { identifier: $identifier })-[r:FOLLOWS]->(followed:User)
 
-        WITH follower, followed,
+        WITH follower, followed, r,
              COUNT { (followed)<-[:FOLLOWS]-(:User) } AS followers_count,
              COUNT { (followed)-[:FOLLOWS]->(:User) } AS following_count
-        
+
         RETURN {
             follower_id: follower.user_id,
             followed_id: followed.user_id,
             identifier: followed.identifier,
-            created_at: toString(followed.created_at),
+            created_at: toString(r.created_at),
             followed: {
                 user_id: followed.user_id,
                 username: followed.username,
@@ -218,10 +241,9 @@ async function fetchFollowingGraph(
                 following_count: following_count
             }
         } AS row
-        
-        ORDER BY followed.created_at DESC
-        SKIP $offset LIMIT $limit
 
+        ORDER BY r.created_at DESC
+        SKIP $offset LIMIT $limit
     `;
 
     const start = process.hrtime.bigint();
@@ -236,6 +258,16 @@ async function fetchFollowingGraph(
 
     const rows: IFollow[] = result.records.map((r) => r.get("row"));
 
+    const countResult = await session.run(
+        `
+        MATCH (u:User { identifier: $identifier })-[:FOLLOWS]->(:User)
+        RETURN COUNT(*) AS cnt
+        `,
+        { identifier }
+    );
+
+    const graphFollowingCount = countResult.records[0].get("cnt").toNumber();
+
     await ActivityModel.create({
         correlationId,
         stepId,
@@ -247,7 +279,12 @@ async function fetchFollowingGraph(
         latencyMs,
         success: true,
         rowsReturned: rows.length,
-        params: { userId, limit, offset },
+        params: {
+            userId,
+            limit,
+            offset,
+            graphFollowingCount,
+        },
         neo4jProfile: cypher,
     });
 
@@ -255,4 +292,3 @@ async function fetchFollowingGraph(
 
     return { latencyMs, success: true, rows };
 }
-

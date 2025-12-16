@@ -8,15 +8,6 @@ import { graphDBSession } from "@/db/neo4j-db";
 import {IComment} from "@/lib/model-types";
 import neo4j from 'neo4j-driver';
 import {FetchActivityResults} from "@/lib/types";
-import {performance} from "perf_hooks";
-
-export interface FetchCommentsParams {
-    postId: number;
-    limit?: number;
-    offset?: number;
-    cachePhase?: "cold" | "warm";
-    correlationId?: string;
-}
 
 type RawCommentRow = Omit<IComment, "user"> & {
     commenter: string; // json_object(...) result
@@ -28,6 +19,7 @@ export interface FetchCommentsParams {
     offset?: number;
     cachePhase?: "cold" | "warm";
     correlationId?: string;
+    engine?: string
 }
 
 /**
@@ -41,6 +33,7 @@ export async function runFetchCommentsExperiment(
         offset = 0,
         cachePhase = "cold",
         correlationId,
+        engine = "sql",
     }: FetchCommentsParams
 ): Promise<FetchActivityResults<IComment>> {
     const queryName = "fetch_comments_recursive";
@@ -65,7 +58,7 @@ export async function runFetchCommentsExperiment(
     const sqlResult = await fetchCommentsSQLRecursive(
         postId, limit, offset, cachePhase, queryName, correlation, stepId
     );
-    await fetchCommentsGraphRecursive(
+    const graphResult = await fetchCommentsGraphRecursive(
         postId, limit, offset, cachePhase, queryName, correlation, stepId
     );
 
@@ -73,12 +66,17 @@ export async function runFetchCommentsExperiment(
         `✅ Step complete: SQL=${sqlResult.latencyMs.toFixed(2)} ms | Graph measured`
     );
 
+    console.log("Engine To Display: ", engine)
+    const rows: IComment[] = engine == "graph" ? graphResult.rows : sqlResult.rows;
+    const rowsToDisplay = rows.slice(0, 5)
+
+
     const response = {
         correlationId: correlation,
         stepId,
         loaded, // new offset for caller
-        rows: sqlResult.rows,
-        rowsToDisplay: sqlResult.rows.slice(0, 5),
+        rows: rows,
+        rowsToDisplay: rowsToDisplay,
         hasMore: true,
     };
 
@@ -179,6 +177,17 @@ async function fetchCommentsSQLRecursive(
     const rowsReturned = rows.length;
     console.log(`✅ [SQLite] ${rowsReturned} comments in ${latencyMs.toFixed(3)} ms`);
 
+    // Normalize SQL data
+    const sqlData = rows.map(r => ({
+        identifier: r.identifier,
+        reply_count: Number(r.reply_count)
+    }));
+
+    const sql_top_comment_count = sqlData.length;
+    const sql_reply_count = sqlData.reduce((acc, r) => acc + (r.reply_count || 0), 0);
+
+    console.log("sql_top_comment_count🔥", sql_top_comment_count, "sql_reply_count", sql_reply_count);
+
     await ActivityModel.create({
         correlationId,
         stepId,
@@ -191,7 +200,7 @@ async function fetchCommentsSQLRecursive(
         success: true,
         errorMessage: undefined,
         rowsReturned,
-        params: { postId, limit, offset, cachePhase },
+        params: { postId, limit, offset, cachePhase, sqlCommentsCount: sql_top_comment_count, sqlRepliesCount: sql_reply_count },
         sqliteExplain: sqlStatement,
     });
 
@@ -200,12 +209,6 @@ async function fetchCommentsSQLRecursive(
 
 
 
-//
-// === Neo4j Recursive Version ===
-//
-//
-// === Neo4j Recursive Version ===
-//
 async function fetchCommentsGraphRecursive(
     postId: number,
     limit: number,
@@ -218,7 +221,9 @@ async function fetchCommentsGraphRecursive(
     const engine = "neo4j";
     const session = graphDBSession();
 
-    // Translate SQL postId -> SQL post.identifier (needed by Neo4j)
+    // ─────────────────────────────────────────────
+    // 1) Resolve SQL post_id → post.identifier
+    // ─────────────────────────────────────────────
     const postRow = sqlDb
         .prepare("SELECT identifier FROM posts WHERE post_id = ?")
         .get(postId) as { identifier: string } | undefined;
@@ -227,16 +232,19 @@ async function fetchCommentsGraphRecursive(
         await session.close();
         throw new Error(`Post with id=${postId} not found in SQL`);
     }
+
     const post_identifier = postRow.identifier;
 
+    // ─────────────────────────────────────────────
+    // 2) Cypher (FIXED parent condition)
+    //    Top-level = does NOT reply to another comment
+    // ─────────────────────────────────────────────
     const cypherStatement = `
         MATCH (p:Post { identifier: $post_identifier })<-[:ON_POST]-(c:Comment)
         MATCH (c)-[:COMMENTED_BY]->(u:User)
-        WHERE NOT (c)<-[:REPLY_TO]-(:Comment)   // top-level only
-    
+        WHERE NOT (c)-[:REPLY_TO]->(:Comment)
         WITH c, u,
              COUNT { (c)<-[:REPLY_TO*1..]-(:Comment) } AS reply_count
-    
         RETURN c {
             .*,
             commenter: u { .* },
@@ -246,24 +254,106 @@ async function fetchCommentsGraphRecursive(
         SKIP $offset LIMIT $limit
     `;
 
+    // ─────────────────────────────────────────────
+    // 3) Execute query
+    // ─────────────────────────────────────────────
     const start = process.hrtime.bigint();
     const result = await session.run(cypherStatement, {
         post_identifier,
         limit: neo4j.int(limit),
         offset: neo4j.int(offset),
     });
-
-    // const latencyMs =
-    //     result.summary.resultAvailableAfter.toNumber() +
-    //     result.summary.resultConsumedAfter.toNumber();
     const end = process.hrtime.bigint();
 
     const latencyMs = Number(end - start) / 1_000_000;
 
-    const rowsReturned = result.records.length;
+    // ─────────────────────────────────────────────
+    // 4) Hydrate SQL IDs (TYPED)
+    // ─────────────────────────────────────────────
+    const commentIdentifiers = result.records.map(
+        r => r.get("comment").identifier as string
+    );
+
+    const userIdentifiers = result.records.map(
+        r => r.get("comment").commenter.identifier as string
+    );
+
+    const commentIdRows =
+        commentIdentifiers.length > 0
+            ? (sqlDb.prepare(`
+                SELECT comment_id, identifier
+                FROM comments
+                WHERE identifier IN (${commentIdentifiers.map(() => "?").join(",")})
+            `).all(...commentIdentifiers) as {
+                comment_id: number;
+                identifier: string;
+            }[])
+            : [];
+
+    const userIdRows =
+        userIdentifiers.length > 0
+            ? (sqlDb.prepare(`
+                SELECT user_id, identifier
+                FROM users
+                WHERE identifier IN (${userIdentifiers.map(() => "?").join(",")})
+            `).all(...userIdentifiers) as {
+                user_id: number;
+                identifier: string;
+            }[])
+            : [];
+
+    const commentIdByIdentifier = new Map(
+        commentIdRows.map(r => [r.identifier, r.comment_id])
+    );
+
+    const userIdByIdentifier = new Map(
+        userIdRows.map(r => [r.identifier, r.user_id])
+    );
+
+    // ─────────────────────────────────────────────
+    // 5) Normalize to SQL-shaped IComment[]
+    // ─────────────────────────────────────────────
+    const rows: IComment[] = result.records.map(record => {
+        const c = record.get("comment");
+
+        return {
+            comment_id: commentIdByIdentifier.get(c.identifier),
+            post_id: postId,
+            user_id: userIdByIdentifier.get(c.commenter.identifier)!,
+            parent_comment_id: undefined,
+
+            identifier: c.identifier,
+            post_identifier,
+
+            content: c.content,
+            created_at: c.created_at?.toString(),
+
+            reply_count: neo4j.integer.toNumber(c.reply_count),
+
+            user: {
+                user_id: userIdByIdentifier.get(c.commenter.identifier),
+                username: c.commenter.username,
+                identifier: c.commenter.identifier,
+                email: c.commenter.email,
+            },
+        };
+    });
+
+    const rowsReturned = rows.length;
+
     await session.close();
 
-    console.log(`✅ [Neo4j] ${rowsReturned} parent comments (recursive) in ${latencyMs.toFixed(3)} ms`);
+    console.log(
+        `✅ [Neo4j] ${rowsReturned} parent comments in ${latencyMs.toFixed(3)} ms`
+    );
+
+    // ─────────────────────────────────────────────
+    // 6) Activity logging (unchanged semantics)
+    // ─────────────────────────────────────────────
+    const graph_reply_count = rows.reduce(
+        (acc, r) => acc + (r.reply_count ?? 0),
+        0
+    );
 
     await ActivityModel.create({
         correlationId,
@@ -275,13 +365,18 @@ async function fetchCommentsGraphRecursive(
         cachePhase,
         latencyMs,
         success: true,
-        errorMessage: undefined,
         rowsReturned,
-        params: { postId, limit, offset },
+        params: {
+            postId,
+            limit,
+            offset,
+            graphCommentsCount: rowsReturned,
+            graphRepliesCount: graph_reply_count,
+        },
         neo4jProfile: cypherStatement,
     });
 
-    return { latencyMs, success: true };
+    return { latencyMs, success: true, rows };
 }
 
 

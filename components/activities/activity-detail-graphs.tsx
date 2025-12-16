@@ -8,6 +8,7 @@ import ListLoader from "@/components/ui/list-loader";
 import ActivityScalabilityGraph from "@/components/activities/activity-scalability-graph";
 import ActivityPerformanceGraph from "@/components/activities/activity-performance-graph";
 import {Item, ItemContent, ItemDescription, ItemTitle} from "@/components/ui/item";
+import {getActivityNameByQueryName} from "@/lib/utils";
 
 type Props = {
     correlation: ICorrelation
@@ -54,11 +55,11 @@ export default function ActivityDetailGraphs({ correlation }: Props) {
             {
                 data && (
                     <div className={"grid grid-cols-2 gap-4"}>
-                        <ActivityScalabilityGraph scalability={data.scalability}/>
+                        <ActivityScalabilityGraph  title={getActivityNameByQueryName(correlation.queryName)} scalability={data.scalability}/>
                         {
                             data.performance.map(p => {
                                 return (
-                                    <ActivityPerformanceGraph key={p.scale} performance={p}/>
+                                    <ActivityPerformanceGraph title={getActivityNameByQueryName(correlation.queryName)} key={p.scale} performance={p}/>
                                 )
                             })
                         }

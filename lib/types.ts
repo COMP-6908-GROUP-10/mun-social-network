@@ -76,6 +76,7 @@ export interface FetchActivityParams {
     offset?: number;
     cachePhase?: "cold" | "warm";
     correlationId?: string; // new = fresh experiment
+    engine?: string //"sql" | "graph" // this engine is just to display the results
 }
 
 export interface FetchActivityResults<T> {
