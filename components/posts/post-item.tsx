@@ -10,6 +10,7 @@ function PostItem({ post }: { post: IPost }) {
 
     return (
         <main className={"w-full py-8"}>
+            { JSON.stringify(post.identifier) }
             <PostHeader post={post}/>
             <PostContent post={post}/>
             <Suspense fallback={null}>
